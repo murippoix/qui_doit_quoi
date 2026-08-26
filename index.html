@@ -65,7 +65,7 @@ button.secondary{background:#eee;color:#222}.row{display:grid;grid-template-colu
 <h2 style="margin:0 0 8px;font-size:20px">精算</h2>
 <div id="summary" class="result">参加者と支払いを入力すると表示されます。</div>
 <div class="notice">※為替レートは取得時点のレートです。実際のカード・両替所のレートや手数料とは異なる場合があります。</div>
-<button id="reset" class="danger">すべてリセット</button>
+
 </div>
 </div>
 
@@ -119,7 +119,7 @@ $('addExpense').onclick=()=>{const payer=$('payer').value,amount=Number($('amoun
 window.delExpense=i=>{state.expenses.splice(i,1);save();renderExpenses();renderSummary()};
 $('trip').oninput=e=>{state.trip=e.target.value;save()};
 $('refresh').onclick=loadRates;
-$('reset').onclick=()=>{if(confirm('すべてのデータを削除しますか？')){localStorage.removeItem('tripSplit');location.reload()}};
+
 renderPeople();loadRates();
 </script>
 </body>
