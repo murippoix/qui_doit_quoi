@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f7f5">
+<title>Qui doit quoi ?</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;background:#f7f7f5}
+*{box-sizing:border-box} body{margin:0} .wrap{max-width:720px;margin:auto;padding:20px 16px 48px}
+h1{font-size:27px;margin:8px 0 4px}.sub{color:#777;margin-bottom:20px}
+.card{background:white;border:1px solid #e8e8e8;border-radius:18px;padding:18px;margin:12px 0;box-shadow:0 2px 10px #00000008}
+label{display:block;font-size:13px;color:#666;margin:0 0 6px}
+input,select,button{width:100%;font:inherit;border-radius:12px;border:1px solid #ddd;padding:12px;background:white}
+button{border:0;background:#222;color:#fff;font-weight:600;cursor:pointer;margin-top:10px}
+button.secondary{background:#eee;color:#222}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.people{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.person{background:#f1f1ef;padding:7px 10px;border-radius:999px;font-size:14px}
+.rate{font-size:13px;color:#666;line-height:1.5}.rate strong{color:#222}
+.expense{border-top:1px solid #eee;padding:13px 0}.expense:first-child{border-top:0}
+.expense .top{display:flex;justify-content:space-between;gap:10px}.expense small{color:#777}
+.result{font-size:16px;line-height:1.7}.result b{font-size:18px}
+.empty{color:#888;text-align:center;padding:12px}
+.notice{font-size:12px;color:#777;margin-top:10px}
+.danger{background:#f3eeee!important;color:#8a3030!important}
+@media(max-width:480px){.row{grid-template-columns:1fr}.wrap{padding-top:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Qui doit quoi ?</h1>
+<div class="sub">タイ・ベトナム旅行の立替精算</div>
+
+<div class="card">
+<label>旅行名</label><input id="trip" placeholder="例：タイ旅行">
+</div>
+
+<div class="card">
+<label>参加者の名前</label>
+<div class="row">
+<input id="name" placeholder="名前を入力">
+<button id="addPerson">参加者を追加</button>
+</div>
+<div id="people" class="people"></div>
+</div>
+
+<div class="card">
+<div class="rate" id="rate">レートを読み込んでいます…</div>
+<button id="refresh" class="secondary">最新レートを更新</button>
+</div>
+
+<div class="card">
+<label>支払いを追加</label>
+<div class="row">
+<div><label>支払った人</label><select id="payer"></select></div>
+<div><label>通貨</label><select id="currency"><option value="THB">🇹🇭 THB（バーツ）</option><option value="VND">🇻🇳 VND（ドン）</option><option value="JPY">🇯🇵 JPY（円）</option></select></div>
+</div>
+<div style="margin-top:10px"><label>金額</label><input id="amount" type="number" inputmode="decimal" min="0" placeholder="0"></div>
+<div style="margin-top:10px"><label>内容（任意）</label><input id="memo" placeholder="例：ホテル、夕食"></div>
+<button id="addExpense">支払いを追加</button>
+<div id="expenses" class="empty">まだ支払いがありません</div>
+</div>
+
+<div class="card">
+<h2 style="margin:0 0 8px;font-size:20px">精算</h2>
+<div id="summary" class="result">参加者と支払いを入力すると表示されます。</div>
+<div class="notice">※為替レートは取得時点のレートです。実際のカード・両替所のレートや手数料とは異なる場合があります。</div>
+</div>
+</div>
+
+<script>
+const API='https://open.er-api.com/v6/latest/JPY';
+let state=JSON.parse(localStorage.getItem('tripSplit')||'null')||{trip:'',people:[],expenses:[],rates:null,updated:null};
+const $=id=>document.getElementById(id);
+$('trip').value=state.trip;
+
+function save(){localStorage.setItem('tripSplit',JSON.stringify(state))}
+function fmt(n,c){return new Intl.NumberFormat('ja-JP',{maximumFractionDigits:c==='VND'?0:2}).format(n)}
+function renderPeople(){
+ $('people').innerHTML=state.people.length?state.people.map(p=>`<span class="person">${esc(p)}</span>`).join(''):'';
+ $('payer').innerHTML=state.people.map(p=>`<option>${esc(p)}</option>`).join('');
+ renderExpenses(); renderSummary();
+}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function toJPY(amount,currency){
+ if(currency==='JPY') return amount;
+ const rate=state.rates?.[currency];
+ return rate ? amount/rate : 0;
+}
+function renderExpenses(){
+ $('expenses').className=state.expenses.length?'':'empty';
+ $('expenses').innerHTML=state.expenses.length?state.expenses.map((e,i)=>`<div class="expense"><div class="top"><div><b>${esc(e.payer)}</b><br><small>${esc(e.memo||'支払い')} ・ ${esc(e.currency)}</small></div><div><b>${fmt(e.amount,e.currency)} ${e.currency}</b><br><small>約 ¥${fmt(toJPY(e.amount,e.currency),'JPY')}</small><br><button class="secondary" style="width:auto;padding:5px 9px;margin:4px 0 0" onclick="delExpense(${i})">削除</button></div></div></div>`).join(''):'まだ支払いがありません';
+}
+function renderSummary(){
+ if(state.people.length<2||!state.expenses.length){$('summary').textContent='参加者と支払いを入力すると表示されます。';return}
+ if(!state.rates){$('summary').textContent='レート取得後に表示されます。';return}
+ const total=state.expenses.reduce((sum,e)=>sum+toJPY(e.amount,e.currency),0);
+ const share=total/state.people.length;
+ const paid=Object.fromEntries(state.people.map(p=>[p,0]));
+ state.expenses.forEach(e=>paid[e.payer]=(paid[e.payer]||0)+toJPY(e.amount,e.currency));
+ const debtors=[],creditors=[];
+ state.people.forEach(p=>{const d=paid[p]-share;if(d<-0.005)debtors.push({p,amt:-d});else if(d>0.005)creditors.push({p,amt:d})});
+ const tx=[];let i=0,j=0;
+ while(i<debtors.length&&j<creditors.length){
+  const x=Math.min(debtors[i].amt,creditors[j].amt);
+  tx.push(`${esc(debtors[i].p)} → ${esc(creditors[j].p)}：<b>¥${fmt(x,'JPY')}</b>`);
+  debtors[i].amt-=x;creditors[j].amt-=x;
+  if(debtors[i].amt<0.01)i++;if(creditors[j].amt<0.01)j++;
+ }
+ $('summary').innerHTML=`合計：<b>¥${fmt(total,'JPY')}</b><br>1人あたり：<b>¥${fmt(share,'JPY')}</b><hr>${tx.length?tx.join('<br>'):'精算はありません。'}`;
+}
+async function loadRates(){
+ $('rate').textContent='最新レートを読み込んでいます…';
+ try{
+  const r=await fetch(API,{cache:'no-store'}),d=await r.json();
+  if(d.result!=='success')throw Error();
+  state.rates={THB:d.rates.THB,VND:d.rates.VND,JPY:1};
+  state.updated=d.time_last_update_utc;save();
+  $('rate').innerHTML=`1 JPY = <strong>${fmt(d.rates.THB,'THB')} THB</strong> ／ <strong>${fmt(d.rates.VND,'VND')} VND</strong><br>取得時刻：${esc(d.time_last_update_utc)}`;
+  renderExpenses();renderSummary();
+ }catch(e){$('rate').textContent='レートを取得できませんでした。インターネット接続をご確認ください。'}
+}
+$('addPerson').onclick=()=>{const n=$('name').value.trim();if(n&&!state.people.includes(n)){state.people.push(n);$('name').value='';save();renderPeople()}};
+$('name').onkeydown=e=>{if(e.key==='Enter')$('addPerson').click()};
+$('addExpense').onclick=()=>{
+ const payer=$('payer').value,amount=Number($('amount').value),currency=$('currency').value;
+ if(!payer||!amount||amount<0)return;
+ state.expenses.push({payer,amount,currency,memo:$('memo').value.trim()});
+ $('amount').value='';$('memo').value='';save();renderExpenses();renderSummary();
+};
+window.delExpense=i=>{state.expenses.splice(i,1);save();renderExpenses();renderSummary()};
+$('trip').oninput=e=>{state.trip=e.target.value;save()};
+$('refresh').onclick=loadRates;
+renderPeople();loadRates();
+</script>
+</body>
+</html>
